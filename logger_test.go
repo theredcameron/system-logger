@@ -1,14 +1,14 @@
-package logger_test
+package systemlogger
 
 import (
 	"testing"
-	"gitlab.com/435089/system-logger"
 )
 
 func TestHelloWorld(t *testing.T) {
-	logger := Logger{}
+	logger, err := CreateLogger("./logs", true)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	logger.HelloWorld();
-
-
+	logger.Log("test log")
 }
