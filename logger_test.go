@@ -6,12 +6,18 @@ import (
 )
 
 func TestHelloWorld(t *testing.T) {
-	logger, err := CreateLogger("./logs", true, 2)
+	loggerConfig := LoggerConfig{
+            LogDirectory: "./logs",
+            Debug: true,
+            MaxTimespanInDays: 1,
+        }
+
+        logger, err := CreateLogger(loggerConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-        time.Sleep(10 * time.Second)
+        time.Sleep(5 * time.Minute)
 
-	logger.Log("test log")
+	logger.Log("Logging Tests Complete")
 }
