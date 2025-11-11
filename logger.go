@@ -2,39 +2,126 @@ package systemlogger
 
 import(
 	"fmt"
-	"os"
 	"strings"
 	"time"
 	"log"
+        "context"
+        "io/fs"
+        "os"
+        "os/signal"
+        "path/filepath"
 )
 
-type Logger struct {
-	LogFilePath	string
-	LogFile		*os.File
-	LogFileName string
-	EnableDebug bool
+type LoggerConfig struct {
+    LogDirectory         string      `json:"logDirectory"`
+    Debug                bool        `json:"debug"`
+    MaxTimespanInDays    int         `json:"maxTimespanInDays"`
 }
 
-func CreateLogger(filePathInput string, debug bool) (*Logger, error) {
-	filePath := strings.TrimSpace(filePathInput)
+type Logger struct {
+	LogFilePath	    string
+	LogFile		    *os.File
+	LogFileName         string
+	EnableDebug         bool
+        MaxTimespanInDays   int
+}
+
+func CreateLogger(loggerConfig LoggerConfig) (*Logger, error) {
+	filePath := strings.TrimSpace(loggerConfig.LogDirectory)
 
 	if len(filePath) == 0 {
 		return nil, fmt.Errorf("The log file path is required")
 	}
 
-	return &Logger{
+	logger := &Logger{
 		LogFilePath: filePath,
-		EnableDebug: debug,
-	}, nil
+		EnableDebug: loggerConfig.Debug,
+                MaxTimespanInDays: loggerConfig.MaxTimespanInDays,
+	}
+
+        go logger.startLogCleaner()
+
+        return logger, nil
+}
+
+func (this *Logger) startLogCleaner() {
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+    defer stop()
+
+    ticker := time.NewTicker(time.Duration(6) * time.Hour) //Check the file directory every six hours
+    defer ticker.Stop()
+
+    this.metaLog("Logging Cleanup Started")
+
+    for {
+        select {
+        case <-ticker.C:
+            err := this.logCleaningAction()
+            if err != nil {
+                this.metaLog(fmt.Sprintf("ERROR: %v", err))
+            }
+        case <-ctx.Done():
+            this.metaLog("Logging Cleanup Closing")
+            return
+        }
+    }
+}
+
+func (this *Logger) logCleaningAction() error {
+    err := filepath.WalkDir(this.LogFilePath, func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+
+        if !d.IsDir() && d.Name() != this.LogFileName {
+            info, err := d.Info()
+            if err != nil {
+                return err
+            }
+
+            modTime := info.ModTime()
+            oldestDate := time.Now().Add(time.Duration((-1 * this.MaxTimespanInDays)) * (24 * time.Hour)) //Set the max age in days for the log files
+            if modTime.Before(oldestDate) {
+                err = this.deleteFile(d.Name())
+                if err != nil {
+                    return err
+                }
+
+                this.metaLog(fmt.Sprintf("Deleted log file: %s", d.Name()))
+            }
+        }
+
+        return nil
+    })
+
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func (this *Logger) deleteFile(fileName string) error {
+    err := os.Remove(fmt.Sprintf("%s/%s", this.LogFilePath, fileName))
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func (this *Logger) metaLog(message string) {
+    message = fmt.Sprintf("***LOGGING SYSTEM***: %s", message)
+    this.log(message)
 }
 
 func (this *Logger) Log(message string) {
-	message = fmt.Sprintf("INFO: %v", message)
+	message = fmt.Sprintf("INFO: %s", message)
 	this.log(message)
 }
 
 func (this *Logger) ErrorMessage(message string) {
-	message = fmt.Sprintf("ERROR: %v", message)
+	message = fmt.Sprintf("ERROR: %s", message)
 	this.log(message)
 }
 
@@ -44,7 +131,7 @@ func (this *Logger) Error(err error) {
 
 func (this *Logger) Debug(message string) {
 	if this.EnableDebug {
-		message = fmt.Sprintf("DEBUG: %v", message)
+		message = fmt.Sprintf("DEBUG: %s", message)
 		this.log(message)
 	}
 }
