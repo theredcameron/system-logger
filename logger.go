@@ -2,10 +2,13 @@ package systemlogger
 
 import(
 	"fmt"
-	"os"
 	"strings"
 	"time"
 	"log"
+        "context"
+        "os"
+        "os/signal"
+        "path/filepath"
 )
 
 type Logger struct {
@@ -13,19 +16,85 @@ type Logger struct {
 	LogFile		*os.File
 	LogFileName string
 	EnableDebug bool
+        MaxTimespanInDays int
 }
 
-func CreateLogger(filePathInput string, debug bool) (*Logger, error) {
+func CreateLogger(filePathInput string, debug bool, timeInSeconds int) (*Logger, error) {
 	filePath := strings.TrimSpace(filePathInput)
 
 	if len(filePath) == 0 {
 		return nil, fmt.Errorf("The log file path is required")
 	}
 
-	return &Logger{
+	logger := &Logger{
 		LogFilePath: filePath,
 		EnableDebug: debug,
-	}, nil
+	}
+
+        go logger.startLogCleaner(timeInSeconds)
+
+        return logger, nil
+}
+
+func (this *Logger) startLogCleaner(timeInSeconds int) {
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+    defer stop()
+
+    ticker := time.NewTicker(time.Duration(timeInSeconds) * time.Second)
+    defer ticker.Stop()
+
+    this.Log("Logging Cleanup Started")
+
+    for {
+        select {
+        case <-ticker.C:
+            this.Log("cleanup")
+        case <-ctx.Done():
+            this.Log("Logging Cleanup Closing")
+            return
+        }
+    }
+}
+
+func (this *Logger) logCleaningAction() error {
+    err := filepath.WalkDir(this.LogFilePath, d fs.DirEntry, err error) {
+        if err != nil {
+            return err
+        }
+
+        if !d.IsDir() && d.Name() != this.LogFileName {
+            info, err := d.Info()
+            if err != nil {
+                return err
+            }
+
+            modTime := info.ModTime()
+            oldestDate := time.Now().Add((-1 * this.MaxTimespanInDays), * time.Day)
+            if modTime.Before(oldestDate) {
+                err = this.deleteFile(d.Name())
+                if err != nil {
+                    return err
+                }
+            }
+        }
+
+        return nil
+    })
+
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func (this *Logger) deleteFile(fileName string) error {
+    err := os.Remove(fmt.Sprintf("%s/%s", this.LogFilePath, fileName))
+    if != err {
+        return err
+    }
+
+    return nil
 }
 
 func (this *Logger) Log(message string) {
