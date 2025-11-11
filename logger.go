@@ -52,11 +52,15 @@ func (this *Logger) startLogCleaner() {
     defer ticker.Stop()
 
     this.metaLog("Logging Cleanup Started")
+    err := this.logCleaningAction()
+    if err != nil {
+        this.metaLog(fmt.Sprintf("ERROR: %v", err))
+    }
 
     for {
         select {
         case <-ticker.C:
-            err := this.logCleaningAction()
+            err = this.logCleaningAction()
             if err != nil {
                 this.metaLog(fmt.Sprintf("ERROR: %v", err))
             }
