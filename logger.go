@@ -10,6 +10,7 @@ import(
         "os"
         "os/signal"
         "path/filepath"
+        "runtime"
 )
 
 type LoggerConfig struct {
@@ -125,7 +126,10 @@ func (this *Logger) Log(message string) {
 }
 
 func (this *Logger) ErrorMessage(message string) {
-	message = fmt.Sprintf("ERROR: %s", message)
+        buf := make([]byte, 1<<16)
+        n := runtime.Stack(buf, false)
+        stackTrace := string(buf[:n])
+	message = fmt.Sprintf("ERROR: %s - StackTrace: %s", message, stackTrace)
 	this.log(message)
 }
 
