@@ -5,7 +5,7 @@ import (
         "time"
 )
 
-func TestHelloWorld(t *testing.T) {
+func TestLog(t *testing.T) {
 	loggerConfig := LoggerConfig{
             LogDirectory: "./logs",
             Debug: true,
@@ -17,7 +17,9 @@ func TestHelloWorld(t *testing.T) {
 		t.Fatal(err)
 	}
 
-        time.Sleep(5 * time.Minute)
+        time.Sleep(5 * time.Second)
 
-	logger.Log("Logging Tests Complete")
+	logger.Log("Logging message")
+	logger.Debug("Logging debug")
+        logger.ErrorMessage("Logging error")
 }
